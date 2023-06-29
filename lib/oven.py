@@ -48,12 +48,12 @@ class Output(object):
             self.active = False
 
     def heat(self,sleepfor):
-        self.GPIO.output(config.gpio_heat, self.GPIO.HIGH)
+        self.GPIO.output(config.gpio_heat, self.GPIO.LOW)
         time.sleep(sleepfor)
 
     def cool(self,sleepfor):
         '''no active cooling, so sleep'''
-        self.GPIO.output(config.gpio_heat, self.GPIO.LOW)
+        self.GPIO.output(config.gpio_heat, self.GPIO.HIGH)
         time.sleep(sleepfor)
 
 # FIX - Board class needs to be completely removed
@@ -133,12 +133,22 @@ class TempSensorReal(TempSensor):
         if config.max31856:
             log.info("init MAX31856")
             from max31856 import MAX31856
-            software_spi = { 'cs': config.gpio_sensor_cs,
-                             'clk': config.gpio_sensor_clock,
-                             'do': config.gpio_sensor_data,
-                             'di': config.gpio_sensor_di }
+            if config.gpio_spi:
+                log.info("using software SPI")
+                software_spi = {'cs': config.gpio_sensor_cs,
+                                'clk': config.gpio_sensor_clock,
+                                'do': config.gpio_sensor_data,
+                                'di': config.gpio_sensor_di }
+                hardware_spi = None
+            else:
+                log.info("using hardware SPI")
+                software_spi = None
+                hardware_spi = {'port': config.spi_port, 
+                                'device': config.spi_device}
+
             self.thermocouple = MAX31856(tc_type=config.thermocouple_type,
                                          software_spi = software_spi,
+                                         hardware_spi = hardware_spi,
                                          units = config.temp_scale,
                                          ac_freq_50hz = config.ac_freq_50hz,
                                          )
@@ -212,6 +222,7 @@ class Oven(threading.Thread):
         self.totaltime = 0
         self.target = 0
         self.heat = 0
+        self.status = ""
         self.pid = PID(ki=config.pid_ki, kd=config.pid_kd, kp=config.pid_kp)
 
     def run_profile(self, profile, startat=0):
@@ -219,15 +230,19 @@ class Oven(threading.Thread):
 
         if self.board.temp_sensor.noConnection:
             log.info("Refusing to start profile - thermocouple not connected")
+            self.status = "Thermocouple not connected"
             return
         if self.board.temp_sensor.shortToGround:
             log.info("Refusing to start profile - thermocouple short to ground")
+            self.status = "Thermocouple short to ground"
             return
         if self.board.temp_sensor.shortToVCC:
             log.info("Refusing to start profile - thermocouple short to VCC")
+            self.status = "Thermocouple short to VCC"
             return
         if self.board.temp_sensor.unknownError:
             log.info("Refusing to start profile - thermocouple unknown error")
+            self.status = "Thermocouple unknown error"
             return
 
         self.startat = startat * 60
@@ -252,14 +267,15 @@ class Oven(threading.Thread):
             # kiln too cold, wait for it to heat up
             if self.target - temp > config.pid_control_window:
                 log.info("kiln must catch up, too cold, shifting schedule")
+                self.status = "Kiln must catch up, too cold"
                 self.start_time = datetime.datetime.now() - datetime.timedelta(milliseconds = self.runtime * 1000)
             # kiln too hot, wait for it to cool down
             if temp - self.target > config.pid_control_window:
                 log.info("kiln must catch up, too hot, shifting schedule")
+                self.status = "Kiln must catch up, too hot"
                 self.start_time = datetime.datetime.now() - datetime.timedelta(milliseconds = self.runtime * 1000)
 
     def update_runtime(self):
-
         runtime_delta = datetime.datetime.now() - self.start_time
         if runtime_delta.total_seconds() < 0:
             runtime_delta = datetime.timedelta(0)
@@ -274,27 +290,32 @@ class Oven(threading.Thread):
         if (self.board.temp_sensor.temperature + config.thermocouple_offset >=
             config.emergency_shutoff_temp):
             log.info("emergency!!! temperature too high")
+            self.status = "Emergency! Temperature too high"
             if config.ignore_temp_too_high == False:
                 self.abort_run()
 
         if self.board.temp_sensor.noConnection:
             log.info("emergency!!! lost connection to thermocouple")
+            self.status = "Emergency! Lost connection to thermocouple"
             if config.ignore_lost_connection_tc == False:
                 self.abort_run()
 
         if self.board.temp_sensor.unknownError:
             log.info("emergency!!! unknown thermocouple error")
+            self.status = "Emergency! Unknown thermocouple error"
             if config.ignore_unknown_tc_error == False:
                 self.abort_run()
 
         if self.board.temp_sensor.bad_percent > 30:
             log.info("emergency!!! too many errors in a short period")
+            self.status = "Emergency! Too many errors in a short period"
             if config.ignore_too_many_tc_errors == False:
                 self.abort_run()
 
     def reset_if_schedule_ended(self):
         if self.runtime > self.totaltime:
             log.info("schedule ended, shutting down")
+            self.status = "Schedule ended, shutting down"
             log.info("total cost = %s%.2f" % (config.currency_type,self.cost))
             self.abort_run()
 
@@ -320,6 +341,7 @@ class Oven(threading.Thread):
             'temperature': temp,
             'target': self.target,
             'state': self.state,
+            'status': self.status,
             'heat': self.heat,
             'totaltime': self.totaltime,
             'kwh_rate': config.kwh_rate,
@@ -394,6 +416,7 @@ class Oven(threading.Thread):
                 time.sleep(1)
                 continue
             if self.state == "RUNNING":
+                self.status = ""
                 self.update_cost()
                 self.save_automatic_restart_state()
                 self.kiln_must_catch_up()
@@ -568,6 +591,8 @@ class Profile():
         return (prev_point, next_point)
 
     def get_target_temperature(self, time):
+        #log.info("time = " + str(time))
+        #log.info("duration = " + str(self.get_duration()))
         if time > self.get_duration():
             return 0
 
@@ -610,12 +635,15 @@ class PID():
         output = 0
         out4logs = 0
         dErr = 0
+        status = ''
         if error < (-1 * config.pid_control_window):
+            status = "Kiln outside pid control window, max cooling"
             log.info("kiln outside pid control window, max cooling")
             output = 0
             # it is possible to set self.iterm=0 here and also below
             # but I dont think its needed
         elif error > (1 * config.pid_control_window):
+            status = "Kiln outside pid control window, max heating"
             log.info("kiln outside pid control window, max heating")
             output = 1
         else:
@@ -649,6 +677,7 @@ class PID():
             'kd': self.kd,
             'pid': out4logs,
             'out': output,
+            'status': status,
         }
 
         return output

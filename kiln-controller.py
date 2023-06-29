@@ -32,6 +32,7 @@ profile_path = config.kiln_profiles_directory
 
 from oven import SimulatedOven, RealOven, Profile
 from ovenWatcher import OvenWatcher
+from ovenDisplay import OvenDisplay
 
 app = bottle.Bottle()
 
@@ -42,6 +43,9 @@ else:
     log.info("this is a real kiln")
     oven = RealOven()
 ovenWatcher = OvenWatcher(oven)
+ovenDisplay = OvenDisplay(oven, ovenWatcher, config.display_sleep_time)
+
+
 # this ovenwatcher is used in the oven class for restarts
 oven.set_ovenwatcher(ovenWatcher)
 
@@ -52,16 +56,20 @@ def index():
 @app.get('/api/stats')
 def handle_api():
     log.info("/api/stats command received")
-    if hasattr(oven,'pid'):
-        if hasattr(oven.pid,'pidstats'):
-            return json.dumps(oven.pid.pidstats)
+    return json.dumps(oven.get_state())
+    # if hasattr(oven,'pid'):
+    #     if hasattr(oven.pid,'pidstats'):
+    #         log.info(oven.pid)
+    #         return json.dumps(oven.pid.pidstats)
+    #     else:
+    #         return "No pidstats"
+    # else:
+    #     return "No pid"
 
 
 @app.post('/api')
 def handle_api():
     log.info("/api is alive")
-
-
     # run a kiln schedule
     if bottle.request.json['cmd'] == 'run':
         wanted = bottle.request.json['profile']
@@ -108,7 +116,7 @@ def find_profile(wanted):
     json profile object or None.
     '''
     #load all profiles from disk
-    profiles = get_profiles()
+    profiles = get_profiles_json()
     json_profiles = json.loads(profiles)
 
     # find the wanted profile
@@ -187,14 +195,14 @@ def handle_storage():
 
             if message == "GET":
                 log.info("GET command received")
-                wsock.send(get_profiles())
+                wsock.send(get_profiles_json())
             elif msgdict.get("cmd") == "DELETE":
                 log.info("DELETE command received")
                 profile_obj = msgdict.get('profile')
                 if delete_profile(profile_obj):
                   msgdict["resp"] = "OK"
                 wsock.send(json.dumps(msgdict))
-                #wsock.send(get_profiles())
+                #wsock.send(get_profiles_json())
             elif msgdict.get("cmd") == "PUT":
                 log.info("PUT command received")
                 profile_obj = msgdict.get('profile')
@@ -209,7 +217,7 @@ def handle_storage():
                     log.debug("websocket (storage) sent: %s" % message)
 
                     wsock.send(json.dumps(msgdict))
-                    wsock.send(get_profiles())
+                    wsock.send(get_profiles_json())
         except WebSocketError:
             break
     log.info("websocket (storage) closed")
@@ -241,7 +249,6 @@ def handle_status():
             break
     log.info("websocket (status) closed")
 
-
 def get_profiles():
     try:
         profile_files = os.listdir(profile_path)
@@ -251,8 +258,13 @@ def get_profiles():
     for filename in profile_files:
         with open(os.path.join(profile_path, filename), 'r') as f:
             profiles.append(json.load(f))
-    return json.dumps(profiles)
+    return profiles
 
+def get_profiles_json():
+    return json.dumps(get_profiles())
+
+def update_profiles():
+    ovenDisplay.update_profiles(get_profiles())
 
 def save_profile(profile, force=False):
     profile_json = json.dumps(profile)
@@ -265,6 +277,7 @@ def save_profile(profile, force=False):
         f.write(profile_json)
         f.close()
     log.info("Wrote %s" % filepath)
+    update_profiles()
     return True
 
 def delete_profile(profile):
@@ -273,6 +286,7 @@ def delete_profile(profile):
     filepath = os.path.join(profile_path, filename)
     os.remove(filepath)
     log.info("Deleted %s" % filepath)
+    update_profiles()
     return True
 
 
@@ -288,6 +302,7 @@ def main():
     ip = "0.0.0.0"
     port = config.listening_port
     log.info("listening on %s:%d" % (ip, port))
+    update_profiles()
 
     server = WSGIServer((ip, port), app,
                         handler_class=WebSocketHandler)
