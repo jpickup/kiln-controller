@@ -73,7 +73,6 @@ gpio_spi = 1
 # temperature_average_samples times during and the average value is used.
 sensor_time_wait = 5
 
-
 ########################################################################
 #
 #   PID parameters
