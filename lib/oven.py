@@ -591,9 +591,10 @@ class Profile():
         return (prev_point, next_point)
 
     def get_target_temperature(self, time):
-        #log.info("time = " + str(time))
-        #log.info("duration = " + str(self.get_duration()))
         if time > self.get_duration():
+            log.info("Time is after duration, target is zero")
+            log.info("time = " + str(time))
+            log.info("duration = " + str(self.get_duration()))
             return 0
 
         (prev_point, next_point) = self.get_surrounding_points(time)
