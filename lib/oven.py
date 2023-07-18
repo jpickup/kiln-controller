@@ -597,10 +597,17 @@ class Profile():
             log.info("duration = " + str(self.get_duration()))
             return 0
 
+        log.debug("Prev point" + str(prev_point))
+        log.debug("Next point" + str(next_point))
+
         (prev_point, next_point) = self.get_surrounding_points(time)
 
         incl = float(next_point[1] - prev_point[1]) / float(next_point[0] - prev_point[0])
         temp = prev_point[1] + (time - prev_point[0]) * incl
+
+        log.debug("Incl:" + str(incl))
+        log.debug("Temp:" + str(temp))
+
         return temp
 
 
