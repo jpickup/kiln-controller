@@ -283,7 +283,9 @@ class Oven(threading.Thread):
         self.runtime = runtime_delta.total_seconds()
 
     def update_target_temp(self):
+        log.debug("Updating target temp")
         self.target = self.profile.get_target_temperature(self.runtime)
+        log.debug("Updated target temp to " + str(self.target))
 
     def reset_if_emergency(self):
         '''reset if the temperature is way TOO HOT, or other critical errors detected'''
@@ -597,10 +599,9 @@ class Profile():
             log.info("duration = " + str(self.get_duration()))
             return 0
 
+        (prev_point, next_point) = self.get_surrounding_points(time)
         log.debug("Prev point" + str(prev_point))
         log.debug("Next point" + str(next_point))
-
-        (prev_point, next_point) = self.get_surrounding_points(time)
 
         incl = float(next_point[1] - prev_point[1]) / float(next_point[0] - prev_point[0])
         temp = prev_point[1] + (time - prev_point[0]) * incl
