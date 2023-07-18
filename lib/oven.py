@@ -609,11 +609,9 @@ class Profile():
         incl = float(next_point[1] - prev_point[1]) / float(next_point[0] - prev_point[0])
         temp = prev_point[1] + (time - prev_point[0]) * incl
 
-        log.debug("Incl:" + str(incl))
-        log.debug("Temp:" + str(temp))
+        log.info("Incl:" + str(incl) + " Temp:" + str(temp))
 
         return temp
-
 
 class PID():
 
