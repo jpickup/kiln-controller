@@ -413,9 +413,12 @@ class Oven(threading.Thread):
     def run(self):
         while True:
             if self.state == "IDLE":
-                if self.should_i_automatic_restart() == True:
-                    self.automatic_restart()
-                time.sleep(1)
+                try:
+                    if self.should_i_automatic_restart() == True:
+                        self.automatic_restart()
+                    time.sleep(1)
+                except:
+                    log.error("Failed to autorestart")
                 continue
             if self.state == "RUNNING":
                 self.status = ""
