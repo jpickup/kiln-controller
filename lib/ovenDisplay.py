@@ -22,6 +22,7 @@ brightness = 1.0
 
 class OvenDisplay(threading.Thread):
     def __init__(self,oven,ovenWatcher,sleepTime):
+        self.last_update = datetime.datetime.now()
         self.last_profile = None
         self.last_log = []
         self.started = None
@@ -185,4 +186,4 @@ class OvenDisplay(threading.Thread):
         return 0
 
     def wakeup_display(self):
-        last_update = datetime.datetime.now()
+        self.last_update = datetime.datetime.now()
