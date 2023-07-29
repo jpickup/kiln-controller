@@ -18,7 +18,7 @@ fnt25 = ImageFont.truetype(font_path, 25, encoding="unic")
 fnt50 = ImageFont.truetype(font_path, 50, encoding="unic")
 fnt75 = ImageFont.truetype(font_path, 75, encoding="unic")
 brightness = 1.0
-last_update = datetime.datetime.now()
+
 
 class OvenDisplay(threading.Thread):
     def __init__(self,oven,ovenWatcher,sleepTime):
@@ -32,6 +32,7 @@ class OvenDisplay(threading.Thread):
         threading.Thread.__init__(self)
         self.display_lock = threading.Lock()
         self.daemon = True
+        self.wakeup_display()
         # oven setup
         self.oven = oven
         self.ovenWatcher = ovenWatcher
@@ -73,11 +74,11 @@ class OvenDisplay(threading.Thread):
     # {'cost': 0.003923616666666667, 'runtime': 0.003829, 'temperature': 23.24140625, 'target': 100.00079770833334, 'state': 'RUNNING', 'heat': 1.0, 'totaltime': 3600, 'kwh_rate': 0.33631, 'currency_type': '£', 'profile': 'test-200-250', 'pidstats': {'time': 1686902305.0, 'timeDelta': 5.027144, 'setpoint': 100.00079770833334, 'ispoint': 23.253125, 'err': 76.74767270833334, 'errDelta': 0, 'p': 1918.6918177083335, 'i': 0, 'd': 0, 'kp': 25, 'ki': 10, 'kd': 200, 'pid': 0, 'out': 1}}
     def update_display(self, oven_state):
         now = datetime.datetime.now()
-        time_since_last_update = now - last_update
+        time_since_last_update = now - self.last_update
         if (time_since_last_update.seconds < 120) or (oven_state['state'] != 'IDLE'):
             brightness = 1.0
         else:
-            brightness = 0.2        # dim when not in use
+            brightness = 0.1        # dim when not in use
 
         with self.display_lock:
             draw.rectangle((0, 0, width, height), (0, 0, 0))
@@ -151,7 +152,7 @@ class OvenDisplay(threading.Thread):
     def stop_oven(self):
         log.info("Aborting run")
         self.oven.abort_run()
-        self.last_update = datetime.datetime.now()
+        self.wakeup_display()
 
     def start_oven(self):
         if (self.profile is None):
@@ -161,24 +162,27 @@ class OvenDisplay(threading.Thread):
             profile_json = json.dumps(self.profile)
             oven_profile = Profile(profile_json)
             self.oven.run_profile(oven_profile)
-        self.last_update = datetime.datetime.now()
+        self.wakeup_display()
 
     def prev_profile(self):
         log.info("Prev profile")
         idx = self.find_profile_idx()
         new_idx = (idx - 1) % len(self.profiles)
         self.profile = self.profiles[new_idx]
-        last_update = datetime.datetime.now()
+        self.wakeup_display()
 
     def next_profile(self):
         log.info("Next profile")
         idx = self.find_profile_idx()
         new_idx = (idx + 1) % len(self.profiles)
         self.profile = self.profiles[new_idx]
-        self.last_update = datetime.datetime.now()
+        self.wakeup_display()
 
     def find_profile_idx(self):
         for idx, p in enumerate(self.profiles):
             if (p == self.profile):
                 return idx
         return 0
+
+    def wakeup_display(self):
+        last_update = datetime.datetime.now()
