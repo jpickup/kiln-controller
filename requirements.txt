@@ -9,3 +9,4 @@ Adafruit-GPIO
 websocket-client
 numpy
 displayhatmini
+Pillow
