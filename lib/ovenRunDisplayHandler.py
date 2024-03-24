@@ -70,7 +70,7 @@ class OvenRunDisplayHandler(OvenDisplayHandler):
     def render(self, data):
         self.oven_state = data
         time_since_last_keypress = datetime.datetime.now() - self.ovenDisplay.lastKeypress()
-        self.dimmed = (time_since_last_keypress.total_seconds() > 120) and (self.oven_state['state'] != 'IDLE')        
+        self.dimmed = (time_since_last_keypress.total_seconds() > 120) and (self.oven_state['state'] == 'IDLE')        
         self.draw.rectangle((0, 0, self.width, self.height), (0, 0, 0))
         self.count += 1
         # TODO - remove this - will use up too much disk
