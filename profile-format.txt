@@ -1,0 +1,14 @@
+{
+    "type": "profile", 
+    "data": [[0, 30], [30000, 700], [33600, 1000], [36000, 1000]], 
+    "name": "simple-bisque"
+}
+
+three members: 
+
+type=profile
+
+data = array of arrays
+each item is a [time, temp] pair where time is in seconds and temp is in degrees
+
+name = the name
