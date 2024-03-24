@@ -97,7 +97,7 @@ class Watcher(object):
             return "No data"
         if 'err' in self.stats:
             if abs(self.stats['err']) > self.temp_error_limit:
-                return "Temp out of whack %0.2f" % self.stats['err']
+                return "Temp out of expected range: %0.2f" % self.stats['err']
         return None
 
     def run(self):
