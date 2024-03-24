@@ -1,7 +1,11 @@
 import threading,logging,json,time,datetime
 from oven import Oven, Profile
 from displayhatmini import DisplayHATMini
+import RPi.GPIO as GPIO
 from PIL import Image, ImageDraw, ImageFont
+from ovenDisplayHandler import OvenDisplayHandler
+from ovenEditDisplayHandler import OvenEditDisplayHandler
+from ovenRunDisplayHandler import OvenRunDisplayHandler
 
 log = logging.getLogger(__name__)
 
@@ -14,26 +18,67 @@ displayhatmini.set_led(0.0, 0.2, 0.0)
 draw = ImageDraw.Draw(buffer)
 # Font path on a Raspberry Pi running Raspbian
 font_path = "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
+fnt15 = ImageFont.truetype(font_path, 15, encoding="unic")
 fnt25 = ImageFont.truetype(font_path, 25, encoding="unic")
 fnt50 = ImageFont.truetype(font_path, 50, encoding="unic")
 fnt75 = ImageFont.truetype(font_path, 75, encoding="unic")
 brightness = 1.0
+# GPIO pins
+BUTTON_A = 5
+BUTTON_B = 6
+BUTTON_X = 16
+BUTTON_Y = 24
+
+def buttonA_callback(channel):
+    log.info("Button A callback")
+    instance = OvenDisplay.getInstance()
+    if (not instance is None):
+        instance.buttonA_clicked()
+
+def buttonB_callback(channel):
+    log.info("Button B callback")
+    instance = OvenDisplay.getInstance()
+    if (not instance is None):
+        instance.buttonB_clicked()
+
+def buttonX_callback(channel):
+    log.info("Button X callback")
+    instance = OvenDisplay.getInstance()
+    if (not instance is None):
+        instance.buttonX_clicked()
+
+def buttonY_callback(channel):
+    log.info("Button Y callback")
+    instance = OvenDisplay.getInstance()
+    if (not instance is None):
+        instance.buttonY_clicked()
 
 
 class OvenDisplay(threading.Thread):
+    __instance = None
+
     def __init__(self,oven,ovenWatcher,sleepTime):
-        self.last_update = datetime.datetime.now()
+        OvenDisplay.__instance = self
+        self.lastCallback = datetime.datetime.now()
+        GPIO.setmode(GPIO.BCM)
+        GPIO.add_event_detect(BUTTON_A, GPIO.FALLING, callback=buttonA_callback, bouncetime=500)
+        GPIO.add_event_detect(BUTTON_B, GPIO.FALLING, callback=buttonB_callback, bouncetime=500)
+        GPIO.add_event_detect(BUTTON_X, GPIO.FALLING, callback=buttonX_callback, bouncetime=500)
+        GPIO.add_event_detect(BUTTON_Y, GPIO.FALLING, callback=buttonY_callback, bouncetime=500)
+
+        self.runDisplayHandler = OvenRunDisplayHandler(displayhatmini, draw, self)
+        self.editDisplayHandler = OvenEditDisplayHandler(displayhatmini, draw, self)
+        self.displayHandlers = [self.runDisplayHandler, self.editDisplayHandler]
+        self.currentDisplayHandlerIdx = 0
+        self.last_keypress = datetime.datetime.now()
         self.last_profile = None
         self.last_log = []
         self.started = None
         self.recording = False
         self.observers = []
-        self.profiles = None
-        self.profile = None
         threading.Thread.__init__(self)
         self.display_lock = threading.Lock()
         self.daemon = True
-        self.wakeup_display()
         # oven setup
         self.oven = oven
         self.ovenWatcher = ovenWatcher
@@ -48,142 +93,91 @@ class OvenDisplay(threading.Thread):
             displayhatmini.set_led(0.0, 0.0, 0.0)
         self.start()
 
+    @classmethod
+    def getInstance(cls):
+        return cls.__instance
+
     def run(self):
         while True:
-            a_pressed = displayhatmini.read_button(displayhatmini.BUTTON_A)
-            b_pressed = displayhatmini.read_button(displayhatmini.BUTTON_B)
-            x_pressed = displayhatmini.read_button(displayhatmini.BUTTON_X)
-            y_pressed = displayhatmini.read_button(displayhatmini.BUTTON_Y)
-            if (x_pressed):
-                self.start_oven()
-            if (y_pressed):
-                self.stop_oven()
-            if (a_pressed):
-                self.prev_profile()
-            if (b_pressed):
-                self.next_profile()
-            self.update_display(self.oven.get_state())
+            timeSinceKeypress = datetime.datetime.now() - self.last_keypress
+            # Only check if the button is still down if it wasn't pressed during the last cycle
+            secondsSinceLastKeypress = timeSinceKeypress.microseconds/1000000 + timeSinceKeypress.seconds
+            if (secondsSinceLastKeypress > 0.5):
+                a_pressed = displayhatmini.read_button(displayhatmini.BUTTON_A)
+                b_pressed = displayhatmini.read_button(displayhatmini.BUTTON_B)
+                x_pressed = displayhatmini.read_button(displayhatmini.BUTTON_X)
+                y_pressed = displayhatmini.read_button(displayhatmini.BUTTON_Y)
+                if (y_pressed):
+                    self.nextDisplayHandler()
+                if (x_pressed):
+                    self.currentDisplayHandler().xPressed()
+                if (a_pressed):
+                    self.currentDisplayHandler().aPressed()
+                if (b_pressed):
+                    self.currentDisplayHandler().bPressed()
+            with self.display_lock:
+                self.currentDisplayHandler().render(self.oven.get_state())
             time.sleep(self.sleep_time)
+
+    def buttonA_clicked(self):
+        log.info("Button A clicked")
+        self.last_keypress = datetime.datetime.now()    
+        self.currentDisplayHandler().aPressed()
+
+    def buttonB_clicked(self):
+        log.info("Button B clicked")
+        self.last_keypress = datetime.datetime.now()    
+        self.currentDisplayHandler().bPressed()
+
+    def buttonX_clicked(self):
+        log.info("Button X clicked")
+        self.last_keypress = datetime.datetime.now()    
+        self.currentDisplayHandler().xPressed()
+
+    def buttonY_clicked(self):
+        log.info("Button Y clicked")
+        self.last_keypress = datetime.datetime.now()    
+        self.nextDisplayHandler()
+
+    def lastKeypress(self):
+        return self.last_keypress
+
+    def currentDisplayHandler(self):
+        return self.displayHandlers[self.currentDisplayHandlerIdx]
+
+    def nextDisplayHandler(self):
+        self.currentDisplayHandlerIdx = (self.currentDisplayHandlerIdx+1) % len(self.displayHandlers)
 
     def update_profiles(self, new_profiles):
         log.info("New profiles ")
         log.info(new_profiles)
-        self.profiles = new_profiles
-
-    # Example contents of oven_state
-    # {'cost': 0, 'runtime': 0, 'temperature': 23.176953125, 'target': 0, 'state': 'IDLE', 'heat': 0, 'totaltime': 0, 'kwh_rate': 0.33631, 'currency_type': '£', 'profile': None, 'pidstats': {}}
-    # {'cost': 0.003923616666666667, 'runtime': 0.003829, 'temperature': 23.24140625, 'target': 100.00079770833334, 'state': 'RUNNING', 'heat': 1.0, 'totaltime': 3600, 'kwh_rate': 0.33631, 'currency_type': '£', 'profile': 'test-200-250', 'pidstats': {'time': 1686902305.0, 'timeDelta': 5.027144, 'setpoint': 100.00079770833334, 'ispoint': 23.253125, 'err': 76.74767270833334, 'errDelta': 0, 'p': 1918.6918177083335, 'i': 0, 'd': 0, 'kp': 25, 'ki': 10, 'kd': 200, 'pid': 0, 'out': 1}}
-    def update_display(self, oven_state):
-        now = datetime.datetime.now()
-        time_since_last_update = now - self.last_update
-        if (time_since_last_update.seconds < 120) or (oven_state['state'] != 'IDLE'):
-            brightness = 1.0
-        else:
-            brightness = 0.1        # dim when not in use
-
-        with self.display_lock:
-            draw.rectangle((0, 0, width, height), (0, 0, 0))
-            self.count = self.count+1
-            # TODO - remove this - will use up too much disk
-            if (self.count % 40 == 0):
-                log.info(oven_state)
-            if (oven_state['temperature'] is not None):
-                self.text("{0:2.0f}°C".format(oven_state['temperature']), (10, 10), fnt75, (255, 255, 255))
-            else:
-                self.text("---°C", (10, 10), fnt75, (255, 255, 255))
-
-            if (oven_state['target'] is not None):
-                self.text("Target: {0:2.0f}°C".format(oven_state['target']), (10, 90), fnt25, (255, 255, 255))
-            else:
-                self.text("Target: ---°C", (10, 90), fnt25, (255, 255, 255))
-
-
-            if (oven_state['profile'] is not None):
-                active_profile_name = oven_state['profile']
-            else:
-                if (self.profile is not None):
-                    active_profile_name = self.profile['name']
-                else:
-                    active_profile_name = 'No Programme'
-
-            self.text(active_profile_name, (10, 125), fnt25, (255, 0, 255))
-
-            if (oven_state['state'] is None):
-                self.text("Initialising", (10, 10), fnt25, (255, 255, 255))
-                displayhatmini.set_led(0.0, 0.0, 0.0)
-            else:
-                self.text(oven_state['state'], (10, 160), fnt25, (255, 255, 255))
-                if (oven_state['state'] == 'IDLE'):
-                    if (self.profile is None):
-                        # no light indicates we can't start a programme
-                        displayhatmini.set_led(0.0, 0.0, 0.0)
-                    else:
-                        # green light indicates we can start a programme
-                        displayhatmini.set_led(0.0, 0.25, 0.0)
-                else:
-                    self.text(oven_state['state'], (10, 160), fnt25, (255, 255, 255))
-                    if (oven_state['heat'] == 1.0):
-                        # red light indicates heating
-                        displayhatmini.set_led(1.0, 0.0, 0.0)
-                    else:
-                        # blue light indicates coooling
-                        displayhatmini.set_led(0.0, 0.0, 1.0)
-                    message = ''
-                    message_colour = (0,0,255)
-                    if (oven_state['totaltime'] is not None and oven_state['runtime'] is not None):
-                        total_time = oven_state['totaltime']      
-                        run_time = oven_state['runtime']  
-                        time_left = total_time - run_time    
-                        time_left_str = str(datetime.timedelta(seconds=round(time_left)))
-                        message = 'Remaining: ' + time_left_str;
-                    if (oven_state['status'] is not None and oven_state['status'] != ""):
-                        message = oven_state['status']
-                        message_colour = (255,0,0)
-                    self.text(message, (10, 195), fnt25, message_colour)
-            displayhatmini.display()
-            displayhatmini.set_backlight(brightness)
+        for idx, dh in enumerate(self.displayHandlers):
+            dh.update_profiles(new_profiles)
 
     def send(self,oven_state_json):
         oven_state = json.loads(oven_state_json)
-        self.update_display(oven_state)
+        with self.display_lock:
+            self.currentDisplayHandler().render(oven_state)
 
     def text(self, text, position, fnt, color):
         draw.text(position, text, font=fnt, fill=color)
 
-    def stop_oven(self):
-        log.info("Aborting run")
+    def runProfile(self, profile):
+        log.info("Running profile: " + profile.name)
+        # calculate the start time
+        startAt = 0
+        if ((not self.oven is None) and not self.oven.get_state() is None):
+            ovenState = self.oven.get_state()
+            currentTemp = ovenState['temperature']
+            if (not currentTemp is None):
+                startAt = profile.calc_start_offset(currentTemp)
+                log.info("Shifted start to " + str(startAt))
+
+        self.oven.run_profile(profile, startAt)
+        self.showRunDisplay()
+
+    def showRunDisplay(self):
+        self.currentDisplayHandlerIdx = 0
+
+    def abortRun(self):
         self.oven.abort_run()
-        self.wakeup_display()
-
-    def start_oven(self):
-        if (self.profile is None):
-            log.error("No programme to start")
-        else:
-            log.info("Starting run " + self.profile['name'])
-            profile_json = json.dumps(self.profile)
-            oven_profile = Profile(profile_json)
-            self.oven.run_profile(oven_profile)
-        self.wakeup_display()
-
-    def prev_profile(self):
-        log.info("Prev profile")
-        idx = self.find_profile_idx()
-        new_idx = (idx - 1) % len(self.profiles)
-        self.profile = self.profiles[new_idx]
-        self.wakeup_display()
-
-    def next_profile(self):
-        log.info("Next profile")
-        idx = self.find_profile_idx()
-        new_idx = (idx + 1) % len(self.profiles)
-        self.profile = self.profiles[new_idx]
-        self.wakeup_display()
-
-    def find_profile_idx(self):
-        for idx, p in enumerate(self.profiles):
-            if (p == self.profile):
-                return idx
-        return 0
-
-    def wakeup_display(self):
-        self.last_update = datetime.datetime.now()

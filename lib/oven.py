@@ -211,6 +211,7 @@ class Oven(threading.Thread):
         self.daemon = True
         self.temperature = 0
         self.time_step = config.sensor_time_wait
+        self.restart_failed = False
         self.reset()
 
     def reset(self):
@@ -245,7 +246,7 @@ class Oven(threading.Thread):
             self.status = "Thermocouple unknown error"
             return
 
-        self.startat = startat * 60
+        self.startat = startat
         self.runtime = self.startat
         self.start_time = datetime.datetime.now() - datetime.timedelta(seconds=self.startat)
         self.profile = profile
@@ -377,8 +378,8 @@ class Oven(threading.Thread):
         self.save_state()
 
     def should_i_automatic_restart(self):
-        # only automatic restart if the feature is enabled
-        if not config.automatic_restarts == True:
+        # only automatic restart if the feature is enabled and hasn't failed
+        if (not config.automatic_restarts) or (self.restart_failed):
             return False
         if self.state_file_is_old():
             duplog.info("automatic restart not possible. state file does not exist or is too old.")
@@ -393,7 +394,7 @@ class Oven(threading.Thread):
 
     def automatic_restart(self):
         with open(config.automatic_restart_state_file) as infile: d = json.load(infile)
-        startat = d["runtime"]/60
+        startat = d["runtime"]
         filename = "%s.json" % (d["profile"])
         profile_path = os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..', 'storage','profiles',filename))
 
@@ -419,17 +420,24 @@ class Oven(threading.Thread):
                     time.sleep(1)
                 except:
                     log.error("Failed to autorestart")
+                    self.restart_failed = True
                 continue
             if self.state == "RUNNING":
-                self.status = ""
-                self.update_cost()
-                self.save_automatic_restart_state()
-                self.kiln_must_catch_up()
-                self.update_runtime()
-                self.update_target_temp()
-                self.heat_then_cool()
-                self.reset_if_emergency()
-                self.reset_if_schedule_ended()
+                try:
+                    self.status = ""
+                    self.update_cost()
+                    self.save_automatic_restart_state()
+                    self.kiln_must_catch_up()
+                    self.update_runtime()
+                    self.update_target_temp()
+                    self.heat_then_cool()
+                    self.reset_if_emergency()
+                    self.reset_if_schedule_ended()
+                except Exception as err:
+                    log.error("Unexpected during run: " + str(err))
+                    self.abort_run()
+                    self.status = "ERR:" + str(err)
+                continue
 
 class SimulatedOven(Oven):
 
@@ -576,6 +584,32 @@ class Profile():
         obj = json.loads(json_data)
         self.name = obj["name"]
         self.data = sorted(obj["data"])
+
+    def calc_start_offset(self, current_temp):
+        log.info("Current temp is: " + str(current_temp))
+        prev_time = 0
+        prev_temp = 0
+        for (time, temp) in self.data:
+            log.info("Point: " + str(temp) + "C @ " +str(time) +"s")
+            if ((current_temp > prev_temp) and (current_temp <= temp) and (time - prev_time > 0)):
+                # our temp is in this range so we can shift the time forward
+                delta_temp = current_temp - prev_temp
+                log.info("delta_temp = " + str(delta_temp))
+                step_temp = temp - prev_temp
+                log.info("step_temp = " + str(step_temp))
+                temp_portion = delta_temp / step_temp
+                log.info("temp_portion = " + str(temp_portion))
+                step_time = time - prev_time
+                log.info("step_time = " + str(step_time))
+                log.info("Curr temp is in the step from " + str(prev_temp) + " to " + str(temp))
+                result = temp_portion * step_time + prev_time
+                log.info("Time shift is therefore: " + str(result))
+                return result
+
+            prev_time = time
+            prev_temp = temp
+        log.info("No offset calculated")   
+        return 0
 
     def get_duration(self):
         return max([t for (t, x) in self.data])
