@@ -23,7 +23,6 @@ fnt25 = ImageFont.truetype(font_path, 25, encoding="unic")
 fnt50 = ImageFont.truetype(font_path, 50, encoding="unic")
 fnt75 = ImageFont.truetype(font_path, 75, encoding="unic")
 brightness = 1.0
-instance = None
 # GPIO pins
 BUTTON_A = 5
 BUTTON_B = 6
@@ -31,25 +30,35 @@ BUTTON_X = 16
 BUTTON_Y = 24
 
 def buttonA_callback(channel):
+    log.info("Button A callback")
+    instance = OvenDisplay.getInstance()
     if (not instance is None):
         instance.buttonA_clicked()
 
 def buttonB_callback(channel):
+    log.info("Button B callback")
+    instance = OvenDisplay.getInstance()
     if (not instance is None):
         instance.buttonB_clicked()
 
 def buttonX_callback(channel):
+    log.info("Button X callback")
+    instance = OvenDisplay.getInstance()
     if (not instance is None):
         instance.buttonX_clicked()
 
 def buttonY_callback(channel):
+    log.info("Button Y callback")
+    instance = OvenDisplay.getInstance()
     if (not instance is None):
         instance.buttonY_clicked()
 
 
 class OvenDisplay(threading.Thread):
+    __instance = None
+
     def __init__(self,oven,ovenWatcher,sleepTime):
-        instance = self
+        OvenDisplay.__instance = self
         self.lastCallback = datetime.datetime.now()
         GPIO.setmode(GPIO.BCM)
         GPIO.add_event_detect(BUTTON_A, GPIO.FALLING, callback=buttonA_callback, bouncetime=100)
@@ -85,6 +94,10 @@ class OvenDisplay(threading.Thread):
             displayhatmini.set_led(0.0, 0.0, 0.0)
         self.start()
 
+    @classmethod
+    def getInstance(cls):
+        return cls.__instance
+
     def run(self):
         while True:
             timeSinceKeypress = datetime.datetime.now() - self.last_update
@@ -107,18 +120,22 @@ class OvenDisplay(threading.Thread):
             time.sleep(self.sleep_time)
 
     def buttonA_clicked(self):
+        log.info("Button A clicked")
         self.last_update = datetime.datetime.now()    
         self.currentDisplayHandler().aPressed()
 
     def buttonB_clicked(self):
+        log.info("Button B clicked")
         self.last_update = datetime.datetime.now()    
         self.currentDisplayHandler().bPressed()
 
     def buttonX_clicked(self):
+        log.info("Button X clicked")
         self.last_update = datetime.datetime.now()    
         self.currentDisplayHandler().xPressed()
 
     def buttonY_clicked(self):
+        log.info("Button Y clicked")
         self.last_update = datetime.datetime.now()    
         self.nextDisplayHandler()
 
