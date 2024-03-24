@@ -12,17 +12,14 @@ class OvenRunDisplayHandler(OvenDisplayHandler):
         self.dimmed = False
 
     def xPressed(self):
-        self.wakeup_display()
         if (not self.dimmed): 
             self.flip_oven_state()
 
     def aPressed(self):
-        self.wakeup_display()
         if (not self.dimmed): 
             self.prev_profile()
 
     def bPressed(self):
-        self.wakeup_display()
         if (not self.dimmed): 
             self.next_profile()
 
@@ -72,9 +69,8 @@ class OvenRunDisplayHandler(OvenDisplayHandler):
     # {'cost': 0.003923616666666667, 'runtime': 0.003829, 'temperature': 23.24140625, 'target': 100.00079770833334, 'state': 'RUNNING', 'heat': 1.0, 'totaltime': 3600, 'kwh_rate': 0.33631, 'currency_type': '£', 'profile': 'test-200-250', 'pidstats': {'time': 1686902305.0, 'timeDelta': 5.027144, 'setpoint': 100.00079770833334, 'ispoint': 23.253125, 'err': 76.74767270833334, 'errDelta': 0, 'p': 1918.6918177083335, 'i': 0, 'd': 0, 'kp': 25, 'ki': 10, 'kd': 200, 'pid': 0, 'out': 1}}
     def render(self, data):
         self.oven_state = data
-        now = datetime.datetime.now()
-        time_since_last_update = now - self.last_update
-        self.dimmed = (time_since_last_update.total_seconds() > 120) and (self.oven_state['state'] != 'IDLE')        
+        time_since_last_keypress = datetime.datetime.now() - self.ovenDisplay.lastKeypress()
+        self.dimmed = (time_since_last_keypress.total_seconds() > 120) and (self.oven_state['state'] != 'IDLE')        
         self.draw.rectangle((0, 0, self.width, self.height), (0, 0, 0))
         self.count += 1
         # TODO - remove this - will use up too much disk

@@ -18,14 +18,12 @@ class OvenEditDisplayHandler(OvenDisplayHandler):
         self.ovenState = None
 
     def xPressed(self):
-        self.wakeup_display()
         self.fieldIdx += 1
         if (self.fieldIdx > 2):
             self.confirm = True
             self.fieldIdx = 0
 
     def aPressed(self):
-        self.wakeup_display()
         if (self.confirm):
             log.info("Confirmed")
             self.confirm = False
@@ -39,7 +37,6 @@ class OvenEditDisplayHandler(OvenDisplayHandler):
                 self.soak += 10
 
     def bPressed(self):
-        self.wakeup_display()
         if (self.confirm):
             log.info("Not confirmed")
             self.confirm = False

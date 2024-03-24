@@ -61,16 +61,16 @@ class OvenDisplay(threading.Thread):
         OvenDisplay.__instance = self
         self.lastCallback = datetime.datetime.now()
         GPIO.setmode(GPIO.BCM)
-        GPIO.add_event_detect(BUTTON_A, GPIO.FALLING, callback=buttonA_callback, bouncetime=100)
-        GPIO.add_event_detect(BUTTON_B, GPIO.FALLING, callback=buttonB_callback, bouncetime=100)
-        GPIO.add_event_detect(BUTTON_X, GPIO.FALLING, callback=buttonX_callback, bouncetime=100)
-        GPIO.add_event_detect(BUTTON_Y, GPIO.FALLING, callback=buttonY_callback, bouncetime=100)
+        GPIO.add_event_detect(BUTTON_A, GPIO.FALLING, callback=buttonA_callback, bouncetime=500)
+        GPIO.add_event_detect(BUTTON_B, GPIO.FALLING, callback=buttonB_callback, bouncetime=500)
+        GPIO.add_event_detect(BUTTON_X, GPIO.FALLING, callback=buttonX_callback, bouncetime=500)
+        GPIO.add_event_detect(BUTTON_Y, GPIO.FALLING, callback=buttonY_callback, bouncetime=500)
 
         self.runDisplayHandler = OvenRunDisplayHandler(displayhatmini, draw, self)
         self.editDisplayHandler = OvenEditDisplayHandler(displayhatmini, draw, self)
         self.displayHandlers = [self.runDisplayHandler, self.editDisplayHandler]
         self.currentDisplayHandlerIdx = 0
-        self.last_update = datetime.datetime.now()
+        self.last_keypress = datetime.datetime.now()
         self.last_profile = None
         self.last_log = []
         self.started = None
@@ -79,7 +79,6 @@ class OvenDisplay(threading.Thread):
         threading.Thread.__init__(self)
         self.display_lock = threading.Lock()
         self.daemon = True
-        self.wakeup_display()
         # oven setup
         self.oven = oven
         self.ovenWatcher = ovenWatcher
@@ -100,9 +99,10 @@ class OvenDisplay(threading.Thread):
 
     def run(self):
         while True:
-            timeSinceKeypress = datetime.datetime.now() - self.last_update
+            timeSinceKeypress = datetime.datetime.now() - self.last_keypress
             # Only check if the button is still down if it wasn't pressed during the last cycle
-            if (timeSinceKeypress.microseconds/1000000 + timeSinceKeypress.seconds) > self.sleep_time:
+            secondsSinceLastKeypress = timeSinceKeypress.microseconds/1000000 + timeSinceKeypress.seconds
+            if (secondsSinceLastKeypress > 0.5):
                 a_pressed = displayhatmini.read_button(displayhatmini.BUTTON_A)
                 b_pressed = displayhatmini.read_button(displayhatmini.BUTTON_B)
                 x_pressed = displayhatmini.read_button(displayhatmini.BUTTON_X)
@@ -121,23 +121,26 @@ class OvenDisplay(threading.Thread):
 
     def buttonA_clicked(self):
         log.info("Button A clicked")
-        self.last_update = datetime.datetime.now()    
+        self.last_keypress = datetime.datetime.now()    
         self.currentDisplayHandler().aPressed()
 
     def buttonB_clicked(self):
         log.info("Button B clicked")
-        self.last_update = datetime.datetime.now()    
+        self.last_keypress = datetime.datetime.now()    
         self.currentDisplayHandler().bPressed()
 
     def buttonX_clicked(self):
         log.info("Button X clicked")
-        self.last_update = datetime.datetime.now()    
+        self.last_keypress = datetime.datetime.now()    
         self.currentDisplayHandler().xPressed()
 
     def buttonY_clicked(self):
         log.info("Button Y clicked")
-        self.last_update = datetime.datetime.now()    
+        self.last_keypress = datetime.datetime.now()    
         self.nextDisplayHandler()
+
+    def lastKeypress(self):
+        return self.last_keypress
 
     def currentDisplayHandler(self):
         return self.displayHandlers[self.currentDisplayHandlerIdx]
@@ -158,9 +161,6 @@ class OvenDisplay(threading.Thread):
 
     def text(self, text, position, fnt, color):
         draw.text(position, text, font=fnt, fill=color)
-
-    def wakeup_display(self):
-        self.last_update = datetime.datetime.now()
 
     def runProfile(self, profile):
         log.info("Running profile: " + profile.name)
