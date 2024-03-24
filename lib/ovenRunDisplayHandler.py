@@ -9,18 +9,22 @@ class OvenRunDisplayHandler(OvenDisplayHandler):
         super().__init__(displayhatmini, draw, ovenDisplay)
         self.count = 0
         self.profile = None
+        self.dimmed = False
 
     def xPressed(self):
         self.wakeup_display()
-        self.flip_oven_state()
+        if (not self.dimmed): 
+            self.flip_oven_state()
 
     def aPressed(self):
         self.wakeup_display()
-        self.prev_profile()
+        if (not self.dimmed): 
+            self.prev_profile()
 
     def bPressed(self):
         self.wakeup_display()
-        self.next_profile()
+        if (not self.dimmed): 
+            self.next_profile()
 
     def flip_oven_state(self):
         # only act if we have state
@@ -70,11 +74,7 @@ class OvenRunDisplayHandler(OvenDisplayHandler):
         self.oven_state = data
         now = datetime.datetime.now()
         time_since_last_update = now - self.last_update
-        if (time_since_last_update.seconds < 120) or (self.oven_state['state'] != 'IDLE'):
-            brightness = 1.0
-        else:
-            brightness = 0.0        # dim when not in use
-
+        self.dimmed = (time_since_last_update.total_seconds() > 120) and (self.oven_state['state'] != 'IDLE')        
         self.draw.rectangle((0, 0, self.width, self.height), (0, 0, 0))
         self.count += 1
         # TODO - remove this - will use up too much disk
@@ -121,4 +121,4 @@ class OvenRunDisplayHandler(OvenDisplayHandler):
                     message_colour = (255,0,0)
                 self.text(message, (10, 195), self.fnt25, message_colour)
         self.displayhatmini.display()
-        self.displayhatmini.set_backlight(brightness)
+        self.displayhatmini.set_backlight(0.0 if self.dimmed else 1.0)

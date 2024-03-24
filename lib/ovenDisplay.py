@@ -1,6 +1,7 @@
 import threading,logging,json,time,datetime
 from oven import Oven, Profile
 from displayhatmini import DisplayHATMini
+import RPi.GPIO as GPIO
 from PIL import Image, ImageDraw, ImageFont
 from ovenDisplayHandler import OvenDisplayHandler
 from ovenEditDisplayHandler import OvenEditDisplayHandler
@@ -22,10 +23,40 @@ fnt25 = ImageFont.truetype(font_path, 25, encoding="unic")
 fnt50 = ImageFont.truetype(font_path, 50, encoding="unic")
 fnt75 = ImageFont.truetype(font_path, 75, encoding="unic")
 brightness = 1.0
+instance = None
+# GPIO pins
+BUTTON_A = 5
+BUTTON_B = 6
+BUTTON_X = 16
+BUTTON_Y = 24
+
+def buttonA_callback(channel):
+    if (not instance is None):
+        instance.buttonA_clicked()
+
+def buttonB_callback(channel):
+    if (not instance is None):
+        instance.buttonB_clicked()
+
+def buttonX_callback(channel):
+    if (not instance is None):
+        instance.buttonX_clicked()
+
+def buttonY_callback(channel):
+    if (not instance is None):
+        instance.buttonY_clicked()
 
 
 class OvenDisplay(threading.Thread):
     def __init__(self,oven,ovenWatcher,sleepTime):
+        instance = self
+        self.lastCallback = datetime.datetime.now()
+        GPIO.setmode(GPIO.BCM)
+        GPIO.add_event_detect(BUTTON_A, GPIO.FALLING, callback=buttonA_callback, bouncetime=100)
+        GPIO.add_event_detect(BUTTON_B, GPIO.FALLING, callback=buttonB_callback, bouncetime=100)
+        GPIO.add_event_detect(BUTTON_X, GPIO.FALLING, callback=buttonX_callback, bouncetime=100)
+        GPIO.add_event_detect(BUTTON_Y, GPIO.FALLING, callback=buttonY_callback, bouncetime=100)
+
         self.runDisplayHandler = OvenRunDisplayHandler(displayhatmini, draw, self)
         self.editDisplayHandler = OvenEditDisplayHandler(displayhatmini, draw, self)
         self.displayHandlers = [self.runDisplayHandler, self.editDisplayHandler]
@@ -56,21 +87,40 @@ class OvenDisplay(threading.Thread):
 
     def run(self):
         while True:
-            a_pressed = displayhatmini.read_button(displayhatmini.BUTTON_A)
-            b_pressed = displayhatmini.read_button(displayhatmini.BUTTON_B)
-            x_pressed = displayhatmini.read_button(displayhatmini.BUTTON_X)
-            y_pressed = displayhatmini.read_button(displayhatmini.BUTTON_Y)
-            if (y_pressed):
-                self.nextDisplayHandler()
-            if (x_pressed):
-                self.currentDisplayHandler().xPressed()
-            if (a_pressed):
-                self.currentDisplayHandler().aPressed()
-            if (b_pressed):
-                self.currentDisplayHandler().bPressed()
+            timeSinceKeypress = datetime.datetime.now() - self.last_update
+            # Only check if the button is still down if it wasn't pressed during the last cycle
+            if (timeSinceKeypress.microseconds/1000000 + timeSinceKeypress.seconds) > self.sleep_time:
+                a_pressed = displayhatmini.read_button(displayhatmini.BUTTON_A)
+                b_pressed = displayhatmini.read_button(displayhatmini.BUTTON_B)
+                x_pressed = displayhatmini.read_button(displayhatmini.BUTTON_X)
+                y_pressed = displayhatmini.read_button(displayhatmini.BUTTON_Y)
+                if (y_pressed):
+                    self.nextDisplayHandler()
+                if (x_pressed):
+                    self.currentDisplayHandler().xPressed()
+                if (a_pressed):
+                    self.currentDisplayHandler().aPressed()
+                if (b_pressed):
+                    self.currentDisplayHandler().bPressed()
             with self.display_lock:
                 self.currentDisplayHandler().render(self.oven.get_state())
             time.sleep(self.sleep_time)
+
+    def buttonA_clicked(self):
+        self.last_update = datetime.datetime.now()    
+        self.currentDisplayHandler().aPressed()
+
+    def buttonB_clicked(self):
+        self.last_update = datetime.datetime.now()    
+        self.currentDisplayHandler().bPressed()
+
+    def buttonX_clicked(self):
+        self.last_update = datetime.datetime.now()    
+        self.currentDisplayHandler().xPressed()
+
+    def buttonY_clicked(self):
+        self.last_update = datetime.datetime.now()    
+        self.nextDisplayHandler()
 
     def currentDisplayHandler(self):
         return self.displayHandlers[self.currentDisplayHandlerIdx]

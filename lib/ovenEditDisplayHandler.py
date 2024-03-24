@@ -9,8 +9,8 @@ class OvenEditDisplayHandler(OvenDisplayHandler):
     def __init__(self, displayhatmini, draw, ovenDisplay):
         super().__init__(displayhatmini, draw, ovenDisplay)
         self.fieldIdx = 0
-        self.ramp = 100.0
-        self.rampTarget = 700.0
+        self.ramp = 90.0
+        self.rampTarget = 750.0
         self.target = 1000.0
         self.soak = 10
         self.confirm = False
@@ -20,7 +20,7 @@ class OvenEditDisplayHandler(OvenDisplayHandler):
     def xPressed(self):
         self.wakeup_display()
         self.fieldIdx += 1
-        if (self.fieldIdx > 3):
+        if (self.fieldIdx > 2):
             self.confirm = True
             self.fieldIdx = 0
 
@@ -34,10 +34,8 @@ class OvenEditDisplayHandler(OvenDisplayHandler):
             if (self.fieldIdx == 0):
                 self.ramp += 10
             if (self.fieldIdx == 1):
-                self.rampTarget += 10
-            if (self.fieldIdx == 2):
                 self.target += 10
-            if (self.fieldIdx == 3):
+            if (self.fieldIdx == 2):
                 self.soak += 10
 
     def bPressed(self):
@@ -49,59 +47,41 @@ class OvenEditDisplayHandler(OvenDisplayHandler):
             if (self.fieldIdx == 0):
                 self.ramp = max(self.ramp - 10, 0)
             if (self.fieldIdx == 1):
-                self.rampTarget = max(self.rampTarget - 10, 0)
-            if (self.fieldIdx == 2):
                 self.target = max(self.target - 10, 0)
-            if (self.fieldIdx == 3):
+            if (self.fieldIdx == 2):
                 self.soak = max(self.soak - 10, 0)
 
     def render(self, data):
         self.ovenState = data
-        halfWidth = self.width / 2
-        halfHeight = self.height / 2
         offset = 7
-        titleHeight = 25
+        titleHeight = 40
         grey = (192,192,192)
         white = (255,255,255)
         black = (0,0,0)
         red = (255,0,0)
-        selectedColour = red
-        unselectedColour = white
         self.draw.rectangle((0, 0, self.width, self.height), black)
 
         self.setLedFromOvenState(data)
 
         if (self.confirm):
             self.text("Ramp: {0:2.0f}°C/h".format(self.ramp), (offset, offset), self.fnt25, white)
-            self.text("Ramp target: {0:2.0f}°C".format(self.rampTarget), (offset, offset + 25), self.fnt25, white)
-            self.text("Target: {0:2.0f}°C".format(self.target), (offset, offset + 50), self.fnt25, white)
-            self.text("Soak: {0:2.0f}min".format(self.soak), (offset, offset + 75), self.fnt25, white)
+            self.text("Target: {0:2.0f}°C".format(self.target), (offset, offset + 25), self.fnt25, white)
+            self.text("Soak: {0:2.0f}min".format(self.soak), (offset, offset + 50), self.fnt25, white)
             self.text("Confirm?", (offset, offset + 120), self.fnt35, red)
             self.text("▲ = Yes , ▼ = no", (offset, offset + 160), self.fnt35, grey)
         else:
-            self.draw.line([0, halfHeight, self.width, halfHeight], white)
-            self.draw.line([halfWidth, 0, halfWidth, self.height], white)
-
             if (self.fieldIdx==0):
-                self.draw.rectangle((0, 0, halfWidth, halfHeight), grey)
+                title = "Ramp"
+                value = "{0:2.0f}°C/h".format(self.ramp)
             elif (self.fieldIdx==1):
-                self.draw.rectangle((halfWidth, 0, self.width, halfHeight), grey)
+                title = "Target"
+                value = "{0:2.0f}°C".format(self.target)
             elif (self.fieldIdx==2):
-                self.draw.rectangle((0, halfHeight, halfWidth, self.height), grey)
-            elif (self.fieldIdx==3):
-                self.draw.rectangle((halfWidth, halfHeight, self.width, self.height), grey)
+                title = "Soak"
+                value = "{0:2.0f}min".format(self.soak)
 
-            self.text("Ramp", (offset, offset), self.fnt20, white)
-            self.text("{0:2.0f}°C/h".format(self.ramp), (offset, offset + titleHeight), self.fnt35, selectedColour if self.fieldIdx==0 else unselectedColour)
-
-            self.text("Ramp Target", (offset + halfWidth, offset), self.fnt20, white)
-            self.text("{0:2.0f}°C".format(self.rampTarget), (offset + halfWidth, offset + titleHeight), self.fnt35, selectedColour if self.fieldIdx==1 else unselectedColour)
-
-            self.text("Target", (offset, offset + halfHeight), self.fnt20, white)
-            self.text("{0:2.0f}°C".format(self.target), (offset, offset + halfHeight + titleHeight), self.fnt35, selectedColour if self.fieldIdx==2 else unselectedColour)
-
-            self.text("Soak", (offset + halfWidth, offset + halfHeight), self.fnt20, white)
-            self.text("{0:2.0f}min".format(self.soak), (offset + halfWidth, offset + halfHeight + titleHeight), self.fnt35, selectedColour if self.fieldIdx==3 else unselectedColour)
+            self.text(title, (offset, offset), self.fnt25, red)
+            self.text(value, (offset, offset + titleHeight), self.fnt50, white)
 
         self.displayhatmini.display()
         self.displayhatmini.set_backlight(1.0)
@@ -113,7 +93,7 @@ class OvenEditDisplayHandler(OvenDisplayHandler):
         else:    
             currentTemp = self.ovenState['temperature']
 
-        name = "{0:2.0f}C-{1:2.0f}C/min-{2:2.0f}soak".format(self.target, self.ramp, self.soak)
+        name = "{0:2.0f}C {1:2.0f}C/h {2:2.0f}m soak".format(self.target, self.ramp, self.soak)
         p0 = [0, currentTemp]
         time1 = (self.rampTarget - currentTemp) * 3600 / self.ramp
         p1 = [time1, self.rampTarget]
