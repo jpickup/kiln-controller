@@ -42,9 +42,6 @@ class OvenDisplayHandler:
     def render(self, data):
         pass
 
-    def wakeup_display(self):
-        self.last_update = datetime.datetime.now()
-
     def update_profiles(self, new_profiles):
         self.profiles = new_profiles
 
