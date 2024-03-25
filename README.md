@@ -2,7 +2,9 @@ Forked from https://github.com/jbruce12000/kiln-controller/ the below is the rea
 
 This version adds a display and buttons to the Raspberry Pi so that it can be used to controll the kiln without the web interface.
 Display used is: 
+
 https://thepihut.com/products/display-hat-mini
+
 https://github.com/pimoroni/displayhatmini-python/tree/main/library/displayhatmini
 
 
