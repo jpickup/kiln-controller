@@ -115,29 +115,36 @@ class OvenDisplay(threading.Thread):
                     self.currentDisplayHandler().aPressed()
                 if (b_pressed):
                     self.currentDisplayHandler().bPressed()
-            with self.display_lock:
-                self.currentDisplayHandler().render(self.oven.get_state())
+            self.render()
             time.sleep(self.sleep_time)
+
+    def render(self):
+        with self.display_lock:
+            self.currentDisplayHandler().render(self.oven.get_state())
 
     def buttonA_clicked(self):
         log.info("Button A clicked")
         self.last_keypress = datetime.datetime.now()    
         self.currentDisplayHandler().aPressed()
+        self.render()
 
     def buttonB_clicked(self):
         log.info("Button B clicked")
         self.last_keypress = datetime.datetime.now()    
         self.currentDisplayHandler().bPressed()
+        self.render()
 
     def buttonX_clicked(self):
         log.info("Button X clicked")
         self.last_keypress = datetime.datetime.now()    
         self.currentDisplayHandler().xPressed()
+        self.render()
 
     def buttonY_clicked(self):
         log.info("Button Y clicked")
         self.last_keypress = datetime.datetime.now()    
         self.nextDisplayHandler()
+        self.render()
 
     def lastKeypress(self):
         return self.last_keypress

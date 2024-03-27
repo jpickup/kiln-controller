@@ -2,19 +2,24 @@ import logging
 import json
 from ovenDisplayHandler import OvenDisplayHandler
 from oven import Oven, Profile
+import config
 
 log = logging.getLogger(__name__)
+grey = (192,192,192)
+white = (255,255,255)
+black = (0,0,0)
+red = (255,0,0)
 
 class OvenEditDisplayHandler(OvenDisplayHandler):
     def __init__(self, displayhatmini, draw, ovenDisplay):
         super().__init__(displayhatmini, draw, ovenDisplay)
         self.fieldIdx = 0
         self.ramp = 90.0
-        self.rampTarget = 750.0
+        self.rampTarget = config.ramp_target
         self.target = 1000.0
         self.soak = 10
         self.confirm = False
-        self.maxRamp = 300
+        self.maxRamp = config.max_ramp
         self.ovenState = None
 
     def xPressed(self):
@@ -52,10 +57,6 @@ class OvenEditDisplayHandler(OvenDisplayHandler):
         self.ovenState = data
         offset = 7
         titleHeight = 40
-        grey = (192,192,192)
-        white = (255,255,255)
-        black = (0,0,0)
-        red = (255,0,0)
         self.draw.rectangle((0, 0, self.width, self.height), black)
 
         self.setLedFromOvenState(data)
