@@ -16,8 +16,13 @@ log_format = '%(asctime)s %(levelname)s %(name)s: %(message)s'
 listening_port = 8081
 
 ########################################################################
-# how long the display module waits between polls for key-presses (s)
-display_sleep_time=0.10
+# Local display options
+#
+display_sleep_time = 0.10   # how long the display module waits between refreshes
+display_timeout = 300       # how long before the display goes to sleep (s)
+confirmation_timeout = 60   # how long to display the confirmation screen (s)
+max_ramp = 300              # max ramp value allowed in the edit display (C)
+ramp_target = 750.0         # the target temp for the ramp step, before going to full power (C)
 
 ########################################################################
 # Cost Information
